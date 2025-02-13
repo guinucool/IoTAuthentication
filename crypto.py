@@ -16,6 +16,26 @@ def generate_key(length: int) -> bytes:
 
     return secrets.token_bytes(length)
 
+def generate_keys(vault_size: int, key_size: int) -> list:
+    '''
+    Generates a set of keys.
+
+    Args:
+        vault_size (int): The size of the set of keys.
+        key_size (int): The size of the keys.
+
+    Returns:
+        list: The set of keys generated.
+    '''
+
+    vault = list()
+
+    for _ in range(vault_size):
+
+        vault.append(generate_key(key_size))
+
+    return vault
+
 def encrypt(data: bytes, key: bytes) -> bytes:
     '''
     Encrypts data given a secure cryptographic key.
@@ -36,7 +56,7 @@ def encrypt(data: bytes, key: bytes) -> bytes:
 
     algorithm = AESGCM(key)
 
-    return (nonce + algorithm.encrypt(nonce, data))
+    return (nonce + algorithm.encrypt(nonce, data, None))
 
 def decrypt(data: bytes, key: bytes, nonce: bytes) -> bytes:
     '''
@@ -55,7 +75,7 @@ def decrypt(data: bytes, key: bytes, nonce: bytes) -> bytes:
 
     algorithm = AESGCM(key)
 
-    return algorithm.decrypt(nonce, data)
+    return algorithm.decrypt(nonce, data, None)
 
 def hmac(data: bytes, key: bytes) -> bytes:
     '''

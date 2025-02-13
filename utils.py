@@ -38,3 +38,39 @@ def write_file_bytes(data: bytes, path: str) -> None:
     file.write(data)
 
     file.close()
+
+def xor(a: bytes, b: bytes) -> bytes:
+    '''
+    Does the XOR operation on the given data, assuming they have the same length
+
+    Args:
+        a (bytes): First data.
+        b (bytes): Second data.
+    '''
+
+    xor = []
+
+    for i in range(len(a)):
+
+        xor.append(a[i] ^ b[i])
+
+    return bytes(xor)
+
+def bytes_list_to_bytes(data: list) -> bytes:
+    '''
+    Converts a list of bytes into a single bytes object.
+
+    Args:
+        data (list): The list of bytes.
+
+    Returns:
+        bytes: The converted list.
+    '''
+
+    final = bytes()
+
+    for info in data:
+
+        final += info
+
+    return final

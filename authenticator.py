@@ -13,18 +13,36 @@ class Authenticator:
 
     Attributes:
         __deviceId (int): The unique identifier of the IoT device.
-        __sessionId (int): The identifier that identifies the session is being monitored.
         __vault (list): The vault of keys available of the session being monitored.
         __vaultKey (bytes): The key to the encrypted vault.
-        __authKey (bytes): The generated key for authentication.
+        __sessionId (int): The identifier that identifies the session is being monitored.
         __sessionKey (bytes): The generated session key.
+        __sessionData (list): The list of data exchanged during the session.
+        __a (bytes): The generated key for authentication.
         __r (int): The random number generated to be used as the challenge.
     '''
 
-    def __init__(self):
-        pass
+    def __init__(self, device_id: int):
+        '''
+        Initializes the Authenticator Object.
 
-    def __readVault(self) -> None:
+        Args:
+            deviceId (int): The identifier of the device the authenticator keeps track of.
+        '''
+
+        # Attributes to be kept in memory
+
+        self.__deviceId = device_id
+        self.__vault = list()
+        self.__vaultKey = read_file_bytes(PATH_DV_KEYS + self.__deviceId)
+        self.__read_vault()
+
+        # Session attributes
+        self.__sessionId = 0
+        self.__sessionKey = generate_key()
+        self.__sessionData = list()
+
+    def __read_vault(self) -> None:
         '''
         Reads and stores the vault keys of a certain device identifier.
 
@@ -56,7 +74,7 @@ class Authenticator:
 
         self.__vault = [vault[i * KEY_LENGTH: (i + 1) * KEY_LENGTH] for i in range(n_keys)]
 
-    def __writeVault(self) -> None:
+    def __write_vault(self) -> None:
         '''
         Writes and stores the current keys in the vault.
 
@@ -93,3 +111,15 @@ class Authenticator:
         # Write the vault into the desired file
 
         write_file_bytes(vault, path)
+
+    def request(self):
+        pass
+
+    def respond(self):
+        pass
+
+    def encrypt(self):
+        pass
+
+    def decrypt(self):
+        pass
