@@ -1,5 +1,5 @@
 from crypto import encrypt, decrypt, hmac, generate_key
-from utils import write_file_bytes, read_file_bytes, xor
+from utils import write_file_bytes, read_file_bytes, xor, bytes_list_to_bytes
 from challenge import Challenge
 from message import Message
 
@@ -8,6 +8,7 @@ PATH_SV_VAULTS = 'svVaults/'
 PATH_DV_KEYS = 'dvKeys/'
 
 KEY_LENGTH = 32 # In bytes
+TIME_TO_LIVE = 9 # In messages
 
 class InvalidCommParameters(Exception):
     pass
@@ -318,3 +319,54 @@ class Authenticator:
         self.__sessionData.append(data)
 
         return data
+    
+    def time_lived(self) -> int:
+        '''
+        Calculates the time this session has been alive in terms of messages exchanged.
+
+        Returns:
+            int: Number of messages exchanged.
+        '''
+
+        return len(self.__sessionData)
+    
+    def reset(self) -> None:
+        '''
+        Resets the authenticator for a new session.
+
+        Returns:
+            None: The authenticator gets reset.
+        '''
+
+        # Convert the data into a 32 bytes stream
+
+        stream = bytes_list_to_bytes(self.__sessionData)
+        key = stream
+
+        if len(key) < 32:
+
+            key += stream
+
+        key = key[0:KEY_LENGTH]
+
+        # Convert the current vault into a bytes stream
+
+        vault = bytes_list_to_bytes(self.__vault)
+
+        # Hash the current vault
+
+        hash = hmac(vault, key)
+
+        # Update the vault
+
+        for key in self.__vault:
+
+            key = xor(key, hash)
+
+        self.__write_vault()
+
+        # Reset the session
+
+        self.__sessionId += 1
+        self.__sessionKey = generate_key(KEY_LENGTH)
+        self.__sessionData = list()

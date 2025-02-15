@@ -56,6 +56,3 @@ print(cdv.verify(data2[0:CHALLENGE_SIZE]))
 
 dv.feed_key(data2[CHALLENGE_SIZE:CHALLENGE_SIZE + KEY_LENGTH])
 
-dv.printxd()
-sv.printxd()
-
