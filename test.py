@@ -1,5 +1,6 @@
 #import socket
-
+from crypto import hmac
+import os
 #server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 #server.bind(('127.0.0.1', 9091))
 #server.listen()
@@ -31,4 +32,4 @@ for info in data:
 
     final += info
 
-print(bytes(data))
+#print(bytes(data))
