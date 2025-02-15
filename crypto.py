@@ -3,6 +3,8 @@ from cryptography.hazmat.primitives.hmac import HMAC
 from cryptography.hazmat.primitives.hashes import SHA256
 import os, secrets
 
+NONCE_SIZE = 12
+
 def generate_key(length: int) -> bytes:
     '''
     Generates a secure cryptographic key.
@@ -50,7 +52,7 @@ def encrypt(data: bytes, key: bytes) -> bytes:
 
     # Generate the random nonce
 
-    nonce = os.urandom(12)
+    nonce = os.urandom(NONCE_SIZE)
 
     # Encrypt the given data
 
@@ -58,24 +60,26 @@ def encrypt(data: bytes, key: bytes) -> bytes:
 
     return (nonce + algorithm.encrypt(nonce, data, None))
 
-def decrypt(data: bytes, key: bytes, nonce: bytes) -> bytes:
+def decrypt(data: bytes, key: bytes) -> bytes:
     '''
     Decrypts data given a secure cryptographic key.
 
     Args:
         data (bytes): The information desired for decryption.
         key (bytes): The key that will be used for decryption.
-        nonce (bytes): The nonce used for encryption.
 
     Returns:
         bytes: The decrypted data with the given key.
+
+    Raises:
+        InvalidTag: If decryption fails due to authentication failure.
     '''
 
     # Decrypt the given data
 
     algorithm = AESGCM(key)
 
-    return algorithm.decrypt(nonce, data, None)
+    return algorithm.decrypt(data[0:NONCE_SIZE], data[NONCE_SIZE:], None)
 
 def hmac(data: bytes, key: bytes) -> bytes:
     '''

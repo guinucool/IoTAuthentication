@@ -75,7 +75,7 @@ class Challenge:
             bytes: The challenge number.
         '''
         
-        return self.__Chal
+        return self.__chal
 
     def solve(self, vault: list) -> bytes:
         '''
@@ -103,10 +103,69 @@ class Challenge:
         Checks if the solution to the challenge is correct.
 
         Args:
-            chal (bytes): The solution.
+            chal (bytes): The answer.
 
         Returns:
             bool: The confirmation of correctness.
         '''
         
         return self.__chal == chal
+    
+    def to_bytes(self) -> bytes:
+        '''
+        Converts a challenge into bytes format.
+
+        Returns:
+            bytes: The challenge in binary format.
+        '''
+
+        # Appends the challenge
+
+        final = self.__chal
+
+        # Append the key set
+
+        final += len(self.__keySet).to_bytes(4, 'little')
+
+        for i in self.__keySet:
+
+            final += i.to_bytes(4, 'little')
+
+        # Return the result
+        return final
+    
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'Challenge':
+        '''
+        Reconstructs a challenge object from bytes.
+
+        Args:
+            data (bytes): The binary representation of the challenge.
+
+        Returns:
+            Challenge: The reconstructed Challenge object.
+        '''
+
+        # Extract challenge bytes
+        
+        chal = data[:CHALLENGE_SIZE]
+
+        # Extract the key set
+
+        size = int.from_bytes(data[CHALLENGE_SIZE:CHALLENGE_SIZE + 4], 'little')
+
+        key_set = []
+        offset = CHALLENGE_SIZE + 4
+
+        for _ in range(size):
+            key_set.append(int.from_bytes(data[offset:offset + 4], 'little'))
+            offset += 4
+
+        # Create the object
+
+        challenge = cls(n_keys=1)
+
+        challenge.__chal = chal
+        challenge.__keySet = key_set
+
+        return challenge

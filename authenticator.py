@@ -1,11 +1,16 @@
 from crypto import encrypt, decrypt, hmac, generate_key
-from utils import write_file_bytes, read_file_bytes
+from utils import write_file_bytes, read_file_bytes, xor
+from challenge import Challenge
+from message import Message
 
 PATH_DV_VAULTS = 'dvVaults/'
 PATH_SV_VAULTS = 'svVaults/'
 PATH_DV_KEYS = 'dvKeys/'
 
 KEY_LENGTH = 32 # In bytes
+
+class InvalidCommParameters(Exception):
+    pass
 
 class Authenticator:
     '''
@@ -18,28 +23,32 @@ class Authenticator:
         __sessionId (int): The identifier that identifies the session is being monitored.
         __sessionKey (bytes): The generated session key.
         __sessionData (list): The list of data exchanged during the session.
-        __a (bytes): The generated key for authentication.
-        __r (int): The random number generated to be used as the challenge.
     '''
 
-    def __init__(self, device_id: int):
+    def __init__(self, device_id: int, device: bool, session_id: int = 0):
         '''
         Initializes the Authenticator Object.
 
         Args:
-            deviceId (int): The identifier of the device the authenticator keeps track of.
+            device_id (int): The identifier of the device the authenticator keeps track of.
+            device (bool): Checks if the authenticator is from a device or a server.
+            session_id (int): The identifier of the session the authenticator keeps track of.
         '''
 
         # Attributes to be kept in memory
 
         self.__deviceId = device_id
         self.__vault = list()
-        self.__vaultKey = read_file_bytes(PATH_DV_KEYS + self.__deviceId)
+        self.__vaultKey = None
+
+        if (device):
+            self.__vaultKey = read_file_bytes(PATH_DV_KEYS + str(self.__deviceId))
+
         self.__read_vault()
 
         # Session attributes
-        self.__sessionId = 0
-        self.__sessionKey = generate_key()
+        self.__sessionId = session_id
+        self.__sessionKey = generate_key(KEY_LENGTH)
         self.__sessionData = list()
 
     def __read_vault(self) -> None:
@@ -52,21 +61,21 @@ class Authenticator:
 
         # Fetch the keys from the vault file
         
-        if self.__key is None:
+        if self.__vaultKey is None:
 
-            path = PATH_SV_VAULTS + self.__deviceId
+            path = PATH_SV_VAULTS + str(self.__deviceId)
 
             vault = read_file_bytes(path)
 
         else:
 
-            path = PATH_DV_VAULTS + self.__deviceId
+            path = PATH_DV_VAULTS + str(self.__deviceId)
 
             encrypted = read_file_bytes(path)
 
             # Decrypt the read vault
 
-            vault = decrypt(encrypted[12:], self.__vaultKey, encrypted[0:12])
+            vault = decrypt(encrypted, self.__vaultKey)
 
         # Read the keys from the vault
 
@@ -84,9 +93,9 @@ class Authenticator:
 
         # Choose a path and prepare the information to be written in the file
         
-        if self.__key is None:
+        if self.__vaultKey is None:
 
-            path = PATH_SV_VAULTS + self.__deviceId
+            path = PATH_SV_VAULTS + str(self.__deviceId)
 
             vault = bytes()
 
@@ -96,7 +105,7 @@ class Authenticator:
 
         else:
 
-            path = PATH_DV_VAULTS + self.__deviceId
+            path = PATH_DV_VAULTS + str(self.__deviceId)
 
             tmp = bytes()
 
@@ -112,14 +121,200 @@ class Authenticator:
 
         write_file_bytes(vault, path)
 
-    def request(self):
-        pass
+    def __check_device_id(self, device_id: int) -> bool:
+        '''
+        Checks if the given identifier is the one supposed to be received in a message.
 
-    def respond(self):
-        pass
+        Args:
+            device_id (int): The identifier to check.
 
-    def encrypt(self):
-        pass
+        Returns:
+            bool: The result of checking.
+        '''
 
-    def decrypt(self):
-        pass
+        return (self.__vaultKey is None and device_id == self.__deviceId) or (device_id == 0 and self.__vaultKey is not None)
+    
+    def __check_session_id(self, session_id: int) -> bool:
+        '''
+        Checks if the given identifier is the one supposed to be received in a message.
+
+        Args:
+            session_id (int): The identifier to check.
+
+        Returns:
+            bool: The result of checking.
+        '''
+
+        return session_id == self.__sessionId
+
+    def generate_challenge(self, t_key: bool, restriction: list = None) -> tuple[bytes, Challenge]:
+        '''
+        Generates a challenge to be solved based on the current vault.
+
+        Args:
+            t_key (bool): Decides if the challenge will take into consideration the session key.
+            restriction (list) = None: Decides if the challenge has a restriction.
+
+        Returns:
+            tuple[bytes, Challenge]: The challenge to be sent and the respective solution.
+        '''
+        
+        # Generates a challenge
+
+        challenge = Challenge(len(self.__vault), restriction)
+
+        # Solve the challenge and append the t_key (if appliable)
+
+        solution = challenge.solve(self.__vault)
+
+        if t_key:
+
+            solution = xor(solution, self.__sessionKey)
+
+        # Return the challenge and solution
+
+        return (solution, challenge)
+
+    def solve_challenge(self, challenge: Challenge, t_key: bytes = None) -> bytes:
+        '''
+        Solves a challenge based on the current vault.
+
+        Args:
+            challenge (Challenge): The challenge to solve.
+            t_key (bytes) = None: The session key to xor.
+
+        Returns:
+            bytes: The solution to the given challenge.
+        '''
+
+        # Solve the challenge with the given parameters
+        
+        solution = challenge.solve(self.__vault)
+
+        if t_key is not None:
+
+            solution = xor(solution, t_key)
+
+        return solution
+
+    def handshake(self, t_key: bool, key: bytes = None, answer: bytes = None, challenge: Challenge = None) -> Message:
+        '''
+        Creates an handshake message with the given parameters and current session attributes.
+
+        Args:
+            t_key (bool): If the session key should or not be appended.
+            key (bytes) = None: Encryption key.
+            answer (bytes) = None: The answer to a challenge.
+            challenge (Challenge) = None: A challenge to be solved.
+
+        Returns:
+            Message: The created handshake message.
+        '''
+
+        # Create a data placeholder
+
+        data = bytes()
+
+        # Append the answer (if appliable)
+
+        if answer is not None:
+
+            data += answer
+
+        # Append the session key (if appliable)
+
+        if t_key:
+
+            data += self.__sessionKey
+
+        # Append the challenge (if appliable)
+
+        if challenge is not None:
+
+            data += challenge.to_bytes()
+
+        # Encrypt the information (if appliable)
+
+        if key is not None:
+
+            data = encrypt(data, key)
+
+        # Build the message frame
+
+        return Message(self.__deviceId, self.__sessionId, b'0', data)
+    
+    def check_handshake(self, hd_msg: Message) -> bool:
+        '''
+        Checks if the attributes of a handshake message are valid.
+
+        Args:
+            hd_msg (Messsage): The handshake message.
+
+        Returns:
+            bool: The correctness of the handshake message.
+        '''
+
+        return self.__check_device_id(hd_msg.get_deviceId()) and self.__check_session_id(hd_msg.get_sessionId()) and hd_msg.get_type() == b'0'
+    
+    def feed_key(self, t_key: bytes) -> None:
+        '''
+        Feeds the received key to the current session key.
+
+        Args:
+            t_key (bytes): The key received.
+
+        Returns:
+            None: The key gets updated.
+        '''
+
+        self.__sessionKey = xor(self.__sessionKey, t_key)
+
+    def encrypt(self, data: bytes) -> Message:
+        '''
+        Encrypts and authenticates a message to be sent.
+
+        Args:
+            data (bytes): The content of the message to be sent.
+
+        Returns:
+            Message: The structured message, ready to be sent.
+        '''
+
+        # Add the data to the data exchanged list
+
+        self.__sessionData.append(data)
+
+        # Encrypt the data and create the message
+
+        enc = encrypt(data, self.__sessionKey)
+
+        return Message(self.__deviceId, self.__sessionId, b'1', enc)
+
+    def decrypt(self, msg: Message) -> bytes:
+        '''
+        Decrypts and checks the authenticy of a message received.
+
+        Args:
+            msg (Message): The message received.
+
+        Returns:
+            bytes: The plain data contained in the message.
+
+        Raises:
+            InvalidTag: If decryption fails due to authentication failure.
+        '''
+
+        # Check message values
+
+        if not (self.__check_device_id(msg.get_deviceId()) and self.__check_session_id(msg.get_sessionId()) and msg.get_type() == b'1'):
+            raise InvalidCommParameters()
+
+        # Decrypt the data received from the message
+
+        data = decrypt(msg.get_data(), self.__sessionKey)
+
+        # Add the data to the data list and return it
+
+        self.__sessionData.append(data)
+
+        return data
