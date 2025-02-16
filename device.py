@@ -1,6 +1,7 @@
 from authenticator import Authenticator
 from controller import Controller
 from copy import deepcopy
+from communications import IOTDeviceCommunicator
 
 class Device:
     '''
@@ -22,7 +23,7 @@ class Device:
                 controller (controller): The controller of the IoT device state and sensors.
             '''
 
-            self.__server = None # RAPH PART - IGNORE
+            self.__server = IOTDeviceCommunicator(sv_addr, sv_port)
             self.__authenticator = None
             self.__controller = deepcopy(controller)
 
@@ -36,7 +37,13 @@ class Device:
         Returns:
             None: The information is sent to the server
         '''
-        pass
+        self.__server.send(data)
+        print(f"Sent {data} to server")
+        
+        
+        
+        
+    
 
     def __recv_sv(self) -> bytes:
         '''
@@ -45,7 +52,10 @@ class Device:
         Returns:
             bytes: The information received
         '''
-        pass
+        data = self.__server.recv()
+        print(f"Received {data} from server")
+        return data
+
 
     def __authenticate(self) -> None:
         '''
