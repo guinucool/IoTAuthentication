@@ -1,5 +1,6 @@
 from copy import deepcopy
 import random
+import struct
 
 class Controller:
     '''
@@ -53,7 +54,24 @@ class Controller:
         Returns:
             None: The generated sensor will be added to the list.
         '''
+
+        if lower_bound is None or upper_bound is None:
+            raise ValueError("> Both lower_bound and upper_bound must be defined for an integer sensor")
+        if not isinstance(lower_bound, int) or not isinstance(upper_bound, int):
+            raise TypeError("> Bounds must be integers!")
+        if lower_bound > upper_bound:
+            raise ValueError("> Lower bound cannot be greater than upper bound!")
+        
+        sensor = {
+            'type': 'INT',
+            'range': (lower_bound, upper_bound),
+            'length': None 
+        }
+
+        self.__sensors.append(sensor)
+
         pass
+
 
     def create_float_sensor(self, lower_bound: float = None, upper_bound: float = None) -> None:
         '''
@@ -66,7 +84,23 @@ class Controller:
         Returns:
             None: The generated sensor will be added to the list.
         '''
+        if lower_bound is None or upper_bound is None:
+            raise ValueError("> Both lower_bound and upper_bound must be defined for an integer sensor")
+        if not isinstance(lower_bound, float) or not isinstance(upper_bound, float):
+            raise TypeError("> Bounds must be floats!")
+        if lower_bound > upper_bound:
+            raise ValueError("> Lower bound cannot be greater than upper bound!")
+        
+        sensor = {
+            'type': 'FLOAT',
+            'range': (lower_bound, upper_bound),
+            'length': None 
+        }
+
+        self.__sensors.append(sensor)
+
         pass
+
 
     def create_str_sensor(self, length: int) -> None:
         '''
@@ -78,6 +112,19 @@ class Controller:
         Returns:
             None: The generated sensor will be added to the list.
         '''
+        if length is None:
+            raise ValueError("> The length must be defined for a string sensor")
+        if not isinstance(length, str):
+            raise TypeError("> Length must be string!")
+        
+        sensor = {
+            'type': 'STRING',
+            'range': None,
+            'length': 25 
+        }
+
+        self.__sensors.append(sensor)
+
         pass
 
     def read_sensors(self, fail: list = None) -> list:
@@ -90,7 +137,29 @@ class Controller:
         Returns:
             list: The list of sensor readings in the same order as the sensors.
         '''
-        pass
+        if fail is None:
+            fail = []
+
+        num_sensors = len(self.__sensors)
+        sensor_data = []
+
+        for i in range(num_sensors):
+            if i in fail:
+                sensor_data.append(None) 
+            else:
+                sensor_type = random.choice(["INT", "FLOAT", "STRING", "BOOLEAN"])
+                
+                if sensor_type == "INT":
+                    sensor_data.append(random.randint(0, 100))
+                elif sensor_type == "FLOAT":
+                    sensor_data.append(round(random.uniform(-20.0, 94.5), 2))
+                elif sensor_type == "STRING":
+                    sensor_data.append(f"Sensor_{i}")
+                elif sensor_type == "BOOLEAN":
+                    sensor_data.append(random.choice([True, False]))
+
+        return sensor_data
+
 
     def change_state(self) -> None:
         '''
@@ -99,6 +168,8 @@ class Controller:
         Returns:
             None: The state of the device is changed.
         '''
+        self.__state = random.choice([0, 1, 2, 3])
+        
         pass
 
     def gen_fail_list(self) -> list:
@@ -108,6 +179,22 @@ class Controller:
         Returns:
             list: The list of random indexes of sensors to fail (might be empty).
         '''
+
+        #Return and empty list if the number of sensors of the device is 0
+
+        num_sensors = len(self.__sensors)
+        if num_sensors == 0:
+            return []
+        
+        #In a range from 0 to num_sensors randomize how many sensors will fail
+
+        num_failures = random.randint(0, num_sensors)
+
+        # Randomly select sensor indexes to fail
+
+        fail_list = random.sample(range(num_sensors), num_failures)
+
+        return fail_list
 
     def read_device_bytes(self, fail: list = None) -> bytes:
         '''
@@ -119,9 +206,33 @@ class Controller:
         Returns:
             bytes: The readings in the bytes format.
         '''
-        pass
+        sensor_data = self.read_sensors(fail)  
+        state_data = self.__state  
+        
+        byte_data = bytearray()  
+        
+        # Convert device state to bytes 
 
-    def bytes_to_infomartion(self, data: bytes) -> tuple[int, list]:
+        byte_data.extend(struct.pack("B", state_data))  
+        
+        for sensor in sensor_data:
+            if isinstance(sensor, int):  
+                byte_data.extend(struct.pack("i", sensor))  
+            elif isinstance(sensor, float):
+                byte_data.extend(struct.pack("f", sensor)) 
+            elif isinstance(sensor, str):
+                encoded_str = sensor.encode("utf-8")  
+                byte_data.extend(struct.pack(f"{len(encoded_str)}s", encoded_str))  
+            elif isinstance(sensor, bool):
+                byte_data.extend(struct.pack("?", sensor)) 
+            else:
+                raise TypeError(f"Unsupported sensor data type: {type(sensor)}")
+        
+        return bytes(byte_data)
+
+        
+
+    def bytes_to_information(self, data: bytes) -> tuple[int, list]:
         '''
         Given binary information generate the device readings.
 
@@ -131,7 +242,51 @@ class Controller:
         Returns:
             tuple[int, list]: The device state and the list of readings.
         '''
-        pass
+        if not data:
+            raise ValueError("> No data was received")
+
+        byte_index = 0
+        device_state = struct.unpack_from("B", data, byte_index)[0]
+        byte_index += struct.calcsize("B")
+
+        readings = []
+        
+        while byte_index < len(data):
+            remaining_bytes = len(data) - byte_index
+
+            if remaining_bytes >= 4:  
+                try:
+                    int_value = struct.unpack_from("i", data, byte_index)[0]
+                    readings.append(int_value)
+                    byte_index += struct.calcsize("i")
+                    continue
+                except struct.error:
+                    pass
+
+                try:
+                    float_value = struct.unpack_from("f", data, byte_index)[0]
+                    readings.append(float_value)
+                    byte_index += struct.calcsize("f")
+                    continue
+                except struct.error:
+                    pass
+
+
+            if remaining_bytes >= 1:
+                try:
+                    bool_value = struct.unpack_from("?", data, byte_index)[0]
+                    readings.append(bool_value)
+                    byte_index += struct.calcsize("?")
+                    continue
+                except struct.error:
+                    pass
+
+
+            str_value = data[byte_index:].decode("utf-8")
+            readings.append(str_value)
+            break  
+
+        return device_state, readings
 
     # Antiga
     def read_sensors(self):
@@ -140,11 +295,11 @@ class Controller:
 
     def send_data(self, sensor_data):
         """ Sends sensor data to the communication module. """
-        self.comm_module.send(sensor_data)  # Assume comm_module has a .transmit() method
+        self.comm_module.send(sensor_data)  
 
     def receive_commands(self):
         """ Receives external commands from the communication module. """
-        command = self.comm_module.receive()  # Assume comm_module has a .receive() method
+        command = self.comm_module.receive() 
         if command:
             self.send_data(self,self.read_sensors)
 
@@ -154,3 +309,4 @@ class Controller:
             sensor_data = self.read_sensors()
             self.send_data(sensor_data)
             self.receive_commands()
+
