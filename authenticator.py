@@ -302,6 +302,7 @@ class Authenticator:
             bytes: The plain data contained in the message.
 
         Raises:
+            InvalidCommParameters: If decryption fails due to authentication failure.
             InvalidTag: If decryption fails due to authentication failure.
         '''
 

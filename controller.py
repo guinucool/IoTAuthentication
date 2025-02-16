@@ -55,23 +55,7 @@ class Controller:
             None: The generated sensor will be added to the list.
         '''
 
-        if lower_bound is None or upper_bound is None:
-            raise ValueError("> Both lower_bound and upper_bound must be defined for an integer sensor")
-        if not isinstance(lower_bound, int) or not isinstance(upper_bound, int):
-            raise TypeError("> Bounds must be integers!")
-        if lower_bound > upper_bound:
-            raise ValueError("> Lower bound cannot be greater than upper bound!")
-        
-        sensor = {
-            'type': 'INT',
-            'range': (lower_bound, upper_bound),
-            'length': None 
-        }
-
-        self.__sensors.append(sensor)
-
-        pass
-
+        self.__sensors.append({'type': 'INT', 'range': (lower_bound, upper_bound)})
 
     def create_float_sensor(self, lower_bound: float = None, upper_bound: float = None) -> None:
         '''
@@ -84,23 +68,8 @@ class Controller:
         Returns:
             None: The generated sensor will be added to the list.
         '''
-        if lower_bound is None or upper_bound is None:
-            raise ValueError("> Both lower_bound and upper_bound must be defined for an integer sensor")
-        if not isinstance(lower_bound, float) or not isinstance(upper_bound, float):
-            raise TypeError("> Bounds must be floats!")
-        if lower_bound > upper_bound:
-            raise ValueError("> Lower bound cannot be greater than upper bound!")
-        
-        sensor = {
-            'type': 'FLOAT',
-            'range': (lower_bound, upper_bound),
-            'length': None 
-        }
 
-        self.__sensors.append(sensor)
-
-        pass
-
+        self.__sensors.append({'type': 'FLOAT', 'range': (lower_bound, upper_bound)})
 
     def create_str_sensor(self, length: int) -> None:
         '''
@@ -112,20 +81,18 @@ class Controller:
         Returns:
             None: The generated sensor will be added to the list.
         '''
-        if length is None:
-            raise ValueError("> The length must be defined for a string sensor")
-        if not isinstance(length, str):
-            raise TypeError("> Length must be string!")
-        
-        sensor = {
-            'type': 'STRING',
-            'range': None,
-            'length': 25 
-        }
 
-        self.__sensors.append(sensor)
+        self.__sensors.append({'type': 'STRING', 'length': length})
 
-        pass
+    def create_bool_sensor(self) -> None:
+        '''
+        Creates a boolean type sensor that generates boolean values.
+
+        Returns:
+            None: The generated sensor will be added to the list.
+        '''
+
+        self.__sensors.append({'type': 'BOOLEAN'})
 
     def read_sensors(self, fail: list = None) -> list:
         '''
@@ -137,17 +104,28 @@ class Controller:
         Returns:
             list: The list of sensor readings in the same order as the sensors.
         '''
+
+        # Defines the failing list as none if not given
+
         if fail is None:
             fail = []
 
-        num_sensors = len(self.__sensors)
-        sensor_data = []
+        # Generate sensor data for each sensor
 
-        for i in range(num_sensors):
+        data = []
+
+        for i, sensor in enumerate(self.__sensors):
+
+            # Checks if sensor is failing
+            
             if i in fail:
-                sensor_data.append(None) 
+
+                data.append(None) 
+
+
             else:
-                sensor_type = random.choice(["INT", "FLOAT", "STRING", "BOOLEAN"])
+
+                sensor_type = sensor['type']
                 
                 if sensor_type == "INT":
                     sensor_data.append(random.randint(0, 100))
@@ -158,8 +136,7 @@ class Controller:
                 elif sensor_type == "BOOLEAN":
                     sensor_data.append(random.choice([True, False]))
 
-        return sensor_data
-
+        return data
 
     def change_state(self) -> None:
         '''
