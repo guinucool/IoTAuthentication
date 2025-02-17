@@ -4,7 +4,7 @@ from threading import Thread
 
 # Start server
 
-sv = Handler({1058: {'auth': None, 'controller': thermo}, 5953: {'auth': None, 'controller': assist}}, 'localhost', 9080)
+sv = Handler({1058: {'auth': None, 'controller': thermo}, 5953: {'auth': None, 'controller': assist}}, 'localhost', 9070)
 
 sv_th = Thread(target=sv.run_server)
 sv_th.start()

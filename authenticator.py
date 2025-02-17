@@ -370,9 +370,9 @@ class Authenticator:
 
         # Update the vault
 
-        for key in self.__vault:
+        for i, key in enumerate(self.__vault):
 
-            key = xor(key, hash)
+            self.__vault[i] = xor(key, hash)
 
         self.__write_vault()
 

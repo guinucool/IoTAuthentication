@@ -2,8 +2,8 @@ from device import Device
 from config_dv import thermo, assist
 from threading import Thread
 
-t_dv = Device('localhost', 9080, 1058, thermo)
-a_dv = Device('localhost', 9080, 5953, assist)
+t_dv = Device('localhost', 9070, 1058, thermo)
+a_dv = Device('localhost', 9070, 5953, assist)
 
 t_th = Thread(target=t_dv.run)
 a_th = Thread(target=a_dv.run)
