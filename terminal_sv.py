@@ -1,10 +1,10 @@
 from handler import Handler
-from config_dv import thermo, assist, rand
+from config_dv import thermo, assist
 from threading import Thread
 
 # Start server
 
-sv = Handler({1058: {'auth': None, 'controller': thermo}, 5953: {'auth': None, 'controller': assist}, 6719: {'auth': None, 'controller': rand}}, 'localhost', 9096)
+sv = Handler({1058: {'auth': None, 'controller': thermo}, 5953: {'auth': None, 'controller': assist}}, 'localhost', 9080)
 
 sv_th = Thread(target=sv.run_server)
 sv_th.start()

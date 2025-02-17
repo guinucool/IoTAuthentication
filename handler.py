@@ -5,7 +5,6 @@ from authenticator import InvalidCommParameters, Authenticator, KEY_LENGTH, TIME
 from crypto import decrypt
 from challenge import Challenge, CHALLENGE_SIZE
 from socket import socket, AF_INET, SOCK_STREAM
-from cryptography.exceptions import InvalidTag
 
 class Handler:
     '''
@@ -30,9 +29,11 @@ class Handler:
         self.__database = list()
         self.__database_lock = Lock()
         self.__devices = devices
+        self.__devices_lock = Lock()
         self.__host = socket(AF_INET, SOCK_STREAM)
         self.__host.bind((sv_addr, sv_port))
-        self.__clients = []
+        self.__clients = list()
+        self.__clients_lock = Lock()
         self.__running = False
 
     def __add_entry_db(self, device_id: int, session_id: int, state: int, sensors: list) -> None:
@@ -110,7 +111,9 @@ class Handler:
 
                 client_socket, _ = self.__host.accept()
 
-                self.__clients.append(client_socket)
+                with self.__clients_lock:
+
+                    self.__clients.append(client_socket)
 
                 Thread(target=self.__handle_conn, args=(client_socket,)).start()
 
@@ -136,50 +139,52 @@ class Handler:
             BrokenPipeError: In case communication fails.
         '''
 
-        # Check if device has running session
+        with self.__devices_lock:
 
-        if (self.__devices[msg.get_deviceId()]['auth'] is not None):
-            raise InvalidCommParameters()
-        
-        # Create authenticator for this device
+            # Check if device has running session
 
-        self.__devices[msg.get_deviceId()]['auth'] = Authenticator(msg.get_deviceId(), False, msg.get_sessionId())
+            if (self.__devices[msg.get_deviceId()]['auth'] is not None):
+                raise InvalidCommParameters()
+            
+            # Create authenticator for this device
 
-        # Create a challenge and send it to the device
+            self.__devices[msg.get_deviceId()]['auth'] = Authenticator(msg.get_deviceId(), False, msg.get_sessionId())
 
-        k1, ch1 = self.__devices[msg.get_deviceId()]['auth'].generate_challenge(False)
+            # Create a challenge and send it to the device
 
-        m2 = self.__devices[msg.get_deviceId()]['auth'].handshake(False, challenge = ch1)
+            k1, ch1 = self.__devices[msg.get_deviceId()]['auth'].generate_challenge(False)
 
-        m2.write_bytes(client)
+            m2 = self.__devices[msg.get_deviceId()]['auth'].handshake(False, challenge = ch1)
 
-        # Retreive the message challenge from the device and solve it
+            m2.write_bytes(client)
 
-        m3 = Message.read_bytes(client)
+            # Retreive the message challenge from the device and solve it
 
-        if not self.__devices[msg.get_deviceId()]['auth'].check_handshake(m3):
-            raise InvalidCommParameters()
-        
-        data = decrypt(m3.get_data(), k1)
+            m3 = Message.read_bytes(client)
 
-        ch2 = Challenge.from_bytes(data[CHALLENGE_SIZE+KEY_LENGTH:])
+            if not self.__devices[msg.get_deviceId()]['auth'].check_handshake(m3):
+                raise InvalidCommParameters()
+            
+            data = decrypt(m3.get_data(), k1)
 
-        # Check the correctness of the solution to the challenge
+            ch2 = Challenge.from_bytes(data[CHALLENGE_SIZE+KEY_LENGTH:])
 
-        if not ch1.verify(data[0:CHALLENGE_SIZE]):
-            raise InvalidCommParameters()
+            # Check the correctness of the solution to the challenge
 
-        t1 = data[CHALLENGE_SIZE:CHALLENGE_SIZE + KEY_LENGTH]
+            if not ch1.verify(data[0:CHALLENGE_SIZE]):
+                raise InvalidCommParameters()
 
-        k2 = self.__devices[msg.get_deviceId()]['auth'].solve_challenge(ch2, t1)
+            t1 = data[CHALLENGE_SIZE:CHALLENGE_SIZE + KEY_LENGTH]
 
-        m4 = self.__devices[msg.get_deviceId()]['auth'].handshake(True, k2, ch2.get_chal())
+            k2 = self.__devices[msg.get_deviceId()]['auth'].solve_challenge(ch2, t1)
 
-        # Associate the gotten session key from device
+            m4 = self.__devices[msg.get_deviceId()]['auth'].handshake(True, k2, ch2.get_chal())
 
-        self.__devices[msg.get_deviceId()]['auth'].feed_key(t1)
+            # Associate the gotten session key from device
 
-        m4.write_bytes(client)
+            self.__devices[msg.get_deviceId()]['auth'].feed_key(t1)
+
+            m4.write_bytes(client)
 
     def __handle_information(self, msg: Message) -> None:
         '''
@@ -195,26 +200,28 @@ class Handler:
             InvalidCommParameters: If decryption fails due to authentication failure.
             InvalidTag: If decryption fails due to authentication failure.
         '''
+
+        with self.__devices_lock:
         
-        # Fetchs the data from the authenticated message
+            # Fetchs the data from the authenticated message
 
-        data = self.__devices[msg.get_deviceId()]['auth'].decrypt(msg)
+            data = self.__devices[msg.get_deviceId()]['auth'].decrypt(msg)
 
-        # Converts the data to readings
+            # Converts the data to readings
 
-        state, sensors = self.__devices[msg.get_deviceId()]['controller'].bytes_to_information(data)
+            state, sensors = self.__devices[msg.get_deviceId()]['controller'].bytes_to_information(data)
 
-        # Adds entry to the database
+            # Adds entry to the database
 
-        self.__add_entry_db(msg.get_deviceId(), msg.get_sessionId(), state, sensors)
+            self.__add_entry_db(msg.get_deviceId(), msg.get_sessionId(), state, sensors)
 
-        # Checks if the current device session finished
+            # Checks if the current device session finished
 
-        if self.__devices[msg.get_deviceId()]['auth'].time_lived() == TIME_TO_LIVE:
+            if self.__devices[msg.get_deviceId()]['auth'].time_lived() == TIME_TO_LIVE:
 
-            self.__devices[msg.get_deviceId()]['auth'].reset()
+                self.__devices[msg.get_deviceId()]['auth'].reset()
 
-            self.__devices[msg.get_deviceId()]['auth'] = None
+                self.__devices[msg.get_deviceId()]['auth'] = None
 
     def __handle_conn(self, client: socket) -> None:
         
@@ -249,12 +256,17 @@ class Handler:
             # Removes the finished connection
 
             client.close()
-            self.__clients.remove(client)
+
+            with self.__clients_lock:
+
+                self.__clients.remove(client)
 
     def close(self) -> None:
 
         self.__running = False
         self.__host.close()
 
-        for client in self.__clients:
-            client.close()
+        with self.__clients_lock:
+
+            for client in self.__clients:
+                client.close()

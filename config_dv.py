@@ -10,10 +10,3 @@ thermo.create_float_sensor(0, 100)
 
 assist = Controller()
 assist.create_str_sensor(10)
-
-# Controller for a random device (ALL)
-
-rand = Controller()
-rand.create_int_sensor(0, 100)
-rand.create_float_sensor(0, 50)
-rand.create_bool_sensor()
