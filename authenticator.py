@@ -240,9 +240,19 @@ class Authenticator:
 
             data = encrypt(data, key)
 
+        # Check if device is server
+
+        if self.__vaultKey is None:
+
+            device_id = 0
+
+        else:
+            
+            device_id = self.__deviceId
+
         # Build the message frame
 
-        return Message(self.__deviceId, self.__sessionId, b'0', data)
+        return Message(device_id, self.__sessionId, b'0', data)
     
     def check_handshake(self, hd_msg: Message) -> bool:
         '''

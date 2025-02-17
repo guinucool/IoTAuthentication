@@ -40,11 +40,6 @@ class Device:
         self.__server.send(data)
         print(f"Sent {data} to server")
         
-        
-        
-        
-    
-
     def __recv_sv(self) -> bytes:
         '''
         Receives information from the server.

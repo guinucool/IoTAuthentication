@@ -77,6 +77,10 @@ class Message:
 
         Returns:
             None: The data is written in the socket.
+
+        Raises:
+            ConnectionResetError: In case communication fails.
+            BrokenPipeError: In case communication fails.
         '''
 
         # Write the header
@@ -94,6 +98,10 @@ class Message:
     def read_bytes(cls, conn: socket):
         '''
         Reads a message from a connection socket.
+
+        Raises:
+            ConnectionResetError: In case communication fails.
+            BrokenPipeError: In case communication fails.
         '''
     
         # Read the header

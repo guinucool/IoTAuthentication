@@ -1,9 +1,11 @@
 from message import Message
 from time import time
-from threading import Lock
-from authenticator import InvalidCommParameters, Authenticator, KEY_LENGTH
+from threading import Lock, Thread
+from authenticator import InvalidCommParameters, Authenticator, KEY_LENGTH, TIME_TO_LIVE
 from crypto import decrypt
 from challenge import Challenge, CHALLENGE_SIZE
+from socket import socket, AF_INET, SOCK_STREAM
+from cryptography.exceptions import InvalidTag
 
 class Handler:
     '''
@@ -28,7 +30,9 @@ class Handler:
         self.__database = list()
         self.__database_lock = Lock()
         self.__devices = devices
-        # RAPH XDDXDXD
+        self.__host = socket(AF_INET, SOCK_STREAM)
+        self.__host.bind((sv_addr, sv_port))
+        self.__clients = []
 
     def __add_entry_db(self, device_id: int, session_id: int, state: int, sensors: list) -> None:
         '''
@@ -95,14 +99,30 @@ class Handler:
                 print(readings)
 
     def run_server(self) -> None:
-        pass
+        
+        self.__host.listen(5)
 
-    def handle_authentication(self, msg: Message) -> None:
+        try:
+
+            while (True):
+
+                client_socket, _ = self.__host.accept()
+
+                self.__clients.append(client_socket)
+
+                Thread(target=self.__handle_conn, args=(client_socket,)).start()
+
+        except Exception:
+
+            pass
+
+    def __handle_authentication(self, msg: Message, client: socket) -> None:
         '''
         Handles the authentication process.
 
         Args:
             msg (Message): The message that generated the auth request.
+            client (Socket): The communication socket with the client.
 
         Returns:
             None: Handles the authentication.
@@ -110,6 +130,8 @@ class Handler:
         Throws:
             InvalidTag: If decryption fails due to authentication failure.
             InvalidCommParameters: If communication of the handshake has invalid parameters.
+            ConnectionResetError: In case communication fails.
+            BrokenPipeError: In case communication fails.
         '''
 
         # Check if device has running session
@@ -127,11 +149,11 @@ class Handler:
 
         m2 = self.__devices[msg.get_deviceId()]['auth'].handshake(False, challenge = ch1)
 
-        # Send m2 # Throw exception if fail
+        m2.write_bytes(client)
 
         # Retreive the message challenge from the device and solve it
 
-        # Receive m3 # Throw exception if fail
+        m3 = Message.read_bytes(client)
 
         if not self.__devices[msg.get_deviceId()]['auth'].check_handshake(m3):
             raise InvalidCommParameters()
@@ -155,9 +177,9 @@ class Handler:
 
         self.__devices[msg.get_deviceId()]['auth'].feed_key(t1)
 
-        # Send m4 # Throw exception if fail
+        m4.write_bytes(client)
 
-    def handle_information(self, msg: Message) -> None:
+    def __handle_information(self, msg: Message) -> None:
         '''
         Handles messages that contain readings from the sensors of a device.
 
@@ -184,5 +206,50 @@ class Handler:
 
         self.__add_entry_db(msg.get_deviceId(), msg.get_sessionId(), state, sensors)
 
-    def handle_conn(self) -> None:
-        pass
+        # Checks if the current device session finished
+
+        if self.__devices[msg.get_deviceId()]['auth'].time_lived() == TIME_TO_LIVE:
+
+            self.__devices[msg.get_deviceId()]['auth'].reset()
+
+    def __handle_conn(self, client: socket) -> None:
+        
+        try:
+
+            while True:
+
+                # Reads the message sent from client
+
+                msg = Message.read_bytes(client)
+
+                # Interprets the message received
+
+                if msg.get_type() == b'0':
+
+                    self.__handle_authentication(msg)
+
+                elif msg.get_type() == b'1':
+                    
+                    self.__handle_information(msg)
+
+                else:
+
+                    raise InvalidCommParameters()
+
+        except (ConnectionResetError, BrokenPipeError, InvalidCommParameters, InvalidTag):
+
+            pass
+
+        finally:
+
+            # Removes the finished connection
+
+            client.close()
+            self.__clients.remove(client)
+
+    def close(self) -> None:
+
+        self.__host.close()
+
+        for client in self.__clients:
+            client.close()
