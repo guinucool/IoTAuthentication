@@ -33,6 +33,7 @@ class Handler:
         self.__host = socket(AF_INET, SOCK_STREAM)
         self.__host.bind((sv_addr, sv_port))
         self.__clients = []
+        self.__running = False
 
     def __add_entry_db(self, device_id: int, session_id: int, state: int, sensors: list) -> None:
         '''
@@ -88,7 +89,7 @@ class Handler:
                 if (session_id is not None and entry['session_id'] != session_id):
                     continue
 
-                print(f'dev_id: {entry['device_id']} | session: {entry['session_id']} | state: {entry['state']} | time: {entry['time']}')
+                print(f'dev_id: {entry["device_id"]} | session: {entry["session_id"]} | state: {entry["state"]} | time: {entry["time"]}')
 
                 readings = ''
 
@@ -101,10 +102,11 @@ class Handler:
     def run_server(self) -> None:
         
         self.__host.listen(5)
+        self.__running = True
 
         try:
 
-            while (True):
+            while (self.__running):
 
                 client_socket, _ = self.__host.accept()
 
@@ -127,7 +129,7 @@ class Handler:
         Returns:
             None: Handles the authentication.
 
-        Throws:
+        Raises:
             InvalidTag: If decryption fails due to authentication failure.
             InvalidCommParameters: If communication of the handshake has invalid parameters.
             ConnectionResetError: In case communication fails.
@@ -200,7 +202,7 @@ class Handler:
 
         # Converts the data to readings
 
-        state, sensors = self.__devices[msg.get_deviceId()]['controller'].bytes_to_infomartion(data) # NEEDS TO RAISE EXCEPTION
+        state, sensors = self.__devices[msg.get_deviceId()]['controller'].bytes_to_information(data)
 
         # Adds entry to the database
 
@@ -211,6 +213,8 @@ class Handler:
         if self.__devices[msg.get_deviceId()]['auth'].time_lived() == TIME_TO_LIVE:
 
             self.__devices[msg.get_deviceId()]['auth'].reset()
+
+            self.__devices[msg.get_deviceId()]['auth'] = None
 
     def __handle_conn(self, client: socket) -> None:
         
@@ -226,7 +230,7 @@ class Handler:
 
                 if msg.get_type() == b'0':
 
-                    self.__handle_authentication(msg)
+                    self.__handle_authentication(msg, client)
 
                 elif msg.get_type() == b'1':
                     
@@ -236,7 +240,7 @@ class Handler:
 
                     raise InvalidCommParameters()
 
-        except (ConnectionResetError, BrokenPipeError, InvalidCommParameters, InvalidTag):
+        except Exception:
 
             pass
 
@@ -249,6 +253,7 @@ class Handler:
 
     def close(self) -> None:
 
+        self.__running = False
         self.__host.close()
 
         for client in self.__clients:

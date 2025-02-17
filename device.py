@@ -1,7 +1,11 @@
-from authenticator import Authenticator
+from authenticator import InvalidCommParameters, Authenticator, KEY_LENGTH, TIME_TO_LIVE
 from controller import Controller
 from copy import deepcopy
-from communications import IOTDeviceCommunicator
+from socket import socket, AF_INET, SOCK_STREAM
+from message import Message
+from challenge import Challenge, CHALLENGE_SIZE
+from crypto import decrypt
+from time import sleep
 
 class Device:
     '''
@@ -23,7 +27,9 @@ class Device:
                 controller (controller): The controller of the IoT device state and sensors.
             '''
 
-            self.__server = IOTDeviceCommunicator(sv_addr, sv_port)
+            self.__deviceId = device_id
+            self.__server = socket(AF_INET, SOCK_STREAM)
+            self.__server.connect((sv_addr, sv_port))
             self.__authenticator = None
             self.__controller = deepcopy(controller)
 
@@ -37,8 +43,10 @@ class Device:
         Returns:
             None: The information is sent to the server
         '''
-        self.__server.send(data)
-        print(f"Sent {data} to server")
+        
+        msg = self.__authenticator.encrypt(data)
+
+        msg.write_bytes(self.__server)
         
     def __recv_sv(self) -> bytes:
         '''
@@ -47,10 +55,10 @@ class Device:
         Returns:
             bytes: The information received
         '''
-        data = self.__server.recv()
-        print(f"Received {data} from server")
-        return data
 
+        msg = Message.write_bytes(self.__server)
+
+        return self.__authenticator.decrypt(msg)
 
     def __authenticate(self) -> None:
         '''
@@ -58,8 +66,58 @@ class Device:
 
         Returns:
             None: The authentication is sucessful and the key is agreed.
+
+        Raises:
+            InvalidTag: If decryption fails due to authentication failure.
+            InvalidCommParameters: If communication of the handshake has invalid parameters.
+            ConnectionResetError: In case communication fails.
+            BrokenPipeError: In case communication fails.
         '''
-        pass
+
+        # Reset or initialize the authenticator
+        
+        if self.__authenticator is None:
+             
+            self.__authenticator = Authenticator(self.__deviceId, True)
+
+        else:
+             
+            self.__authenticator.reset()
+
+        # Create the handshake to send to the server
+
+        m1 = self.__authenticator.handshake(False)
+
+        m1.write_bytes(self.__server)
+
+        # Receive and solve challenge from server
+
+        m2 = Message.read_bytes(self.__server)
+
+        ch1 = Challenge.from_bytes(m2.get_data())
+
+        k1 = self.__authenticator.solve_challenge(ch1)
+
+        # Create challenge for server
+
+        k2, ch2 = self.__authenticator.generate_challenge(True, ch1.get_set())
+
+        m3 = self.__authenticator.handshake(True, k1, ch1.get_chal(), ch2)
+
+        m3.write_bytes(self.__server)
+
+        # Receive solution from server
+
+        m4 = Message.read_bytes(self.__server)
+
+        self.__authenticator.check_handshake(m4)
+
+        data = decrypt(m4.get_data(), k2)
+
+        if not ch2.verify(data[0:CHALLENGE_SIZE]):
+            raise InvalidCommParameters()
+
+        self.__authenticator.feed_key(data[CHALLENGE_SIZE:CHALLENGE_SIZE + KEY_LENGTH])
 
     def run(self) -> None:
         '''
@@ -68,4 +126,44 @@ class Device:
         Returns:
             None: The execution is runned.
         '''
-        pass
+    
+
+        try:
+
+            while True:
+
+                # Authenticate the device
+
+                if self.__authenticator is None or self.__authenticator.time_lived() == TIME_TO_LIVE:
+
+                    self.__authenticate()
+
+                # Generate the sensor data
+
+                sleep(3)
+
+                self.__controller.change_state()
+
+                data = self.__controller.read_device_bytes(None)
+
+                # Send sensor data to the server
+
+                self.__send_sv(data)
+
+        except Exception:
+
+            print('Lost connection to the server!')
+
+        finally:
+            
+            self.close()
+
+    def close(self) -> None:
+        '''
+        Closes the IoT device functioning.
+
+        Returns:
+            None: Finalizes the device functioning.
+        '''
+
+        self.__server.close()

@@ -32,8 +32,6 @@ class Controller:
             Initializes a Controller object.
 
             Args:
-                sv_addr (str): The address of the server.
-                sv_port (int): The port of the server.
                 sensors (list) = None: A preset list of sensors in the correct format.
             '''
 
@@ -203,7 +201,7 @@ class Controller:
 
             if isinstance(reading, int):
                 
-                byte_data += reading.to_bytes(4, 'little')
+                byte_data += reading.to_bytes(4, 'little', signed=True)
 
             elif isinstance(reading, float):
 
@@ -232,7 +230,7 @@ class Controller:
 
         # Get the device state and the starting index
 
-        state = int.from_bytes(data[0:4])
+        state = int.from_bytes(data[0:4], 'little')
         byte_index = 4
 
         # Get the readings of the device
@@ -245,7 +243,7 @@ class Controller:
                 
             if sensor_type == "INT":
 
-                readings.append(data[byte_index:byte_index+4])
+                readings.append(int.from_bytes(data[byte_index:byte_index+4], 'little', signed=True))
 
                 byte_index += 4
 
